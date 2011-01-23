@@ -25,10 +25,41 @@ def after_bundler(&block); @after_blocks << block; end
 # >---------------------------------[ RSpec ]---------------------------------<
 
 # Use RSpec for unit testing for this Rails app.
-say_recipe 'RSpec'
 
 after_bundler do
+  say_recipe 'RSpec'
   generate 'rspec:install'
+end
+
+# >--------------------------------[ Spork  ]---------------------------------<
+
+# Spork hack from http://railstutorial.org/chapters/static-pages#sec:spork
+
+after_bundler do
+  say_recipe 'Spork'
+  run "spork --bootstrap"
+
+  # hack part 1
+  inject_into_file "spec/spec_helper.rb", :after => "config.use_transactional_fixtures = true\n" do
+    "\n  ### Part of a Spork hack. See http://bit.ly/arY19y
+  # Emulate initializer set_clear_dependencies_hook in
+  # railties/lib/rails/application/bootstrap.rb
+  ActiveSupport::Dependencies.clear\n"
+  end
+
+  # hack part 2
+  inject_into_file "config/application.rb", :after => "config.filter_parameters += [:password]\n" do
+    "\n  ### Part of a Spork hack. See http://bit.ly/arY19y
+    if Rails.env.test?
+      initializer :after => :initialize_dependency_mechanism do
+        # Work around initializer in railties/lib/rails/application/bootstrap.rb
+        ActiveSupport::Dependencies.mechanism = :load
+      end
+    end\n"
+  end
+
+  # have rspec use spork by default
+  append_file '.rspec', "\n--drb"
 end
 
 # >--------------------------------[ jQuery ]---------------------------------<
@@ -78,7 +109,6 @@ gem "cancan", '~> 1.4'
 
 group :test do
   gem "factory_girl_rails", '1.0'
-  gem "redgreen"
   gem 'rspec', '2.3.0'
   gem 'webrat', '0.7.1'
   gem 'spork', '0.8.4'
